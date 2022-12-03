@@ -128,7 +128,7 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Turn %d: Calculating move for game %s\n", moveRequest.Turn, moveRequest.Game.ID)
 
-	move := move(moveRequest.You.Head, moveRequest.Board)
+	move := move(moveRequest.You, moveRequest.Board)
 
 	// Respond with the calculated move
 	encoder := json.NewEncoder(w)
@@ -137,30 +137,50 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func move(currentPosition Coord, board Board) MoveResponse {
+func move(you Snake, board Board) MoveResponse {
 	// Create a list of possible moves
-	var moves []map[string]Coord
-	moves = append(moves, map[string]Coord{"right": {X: currentPosition.X + 1, Y: currentPosition.Y}})
-	moves = append(moves, map[string]Coord{"left": {X: currentPosition.X - 1, Y: currentPosition.Y}})
-	moves = append(moves, map[string]Coord{"up": {X: currentPosition.X, Y: currentPosition.Y + 1}})
-	moves = append(moves, map[string]Coord{"down": {X: currentPosition.X, Y: currentPosition.Y - 1}})
+	currentPosition := you.Head
+	moves := map[string]Coord{
+		"right": {X: currentPosition.X + 1, Y: currentPosition.Y},
+		"left":  {X: currentPosition.X - 1, Y: currentPosition.Y},
+		"up":    {X: currentPosition.X, Y: currentPosition.Y + 1},
+		"down":  {X: currentPosition.X, Y: currentPosition.Y - 1},
+	}
 
-	// Filter out moves that would cause the snake to collide with a wall
-	for i, m := range moves {
-		for _, move := range m {
-			if move.X < 0 && move.X >= board.Width && move.Y < 0 && move.Y >= board.Height { // Out of bound, pop them from list
-				moves = append(moves[:i], moves[i+1:]...)
+	log.Printf("Possible moves: %+v", moves)
+
+	// Filter out moves that would cause the snake to collide with a wall or itself
+	for key, move := range moves {
+		// Remove moves that would result in colliding with the wall
+		if move.X < 0 || move.X >= board.Width || move.Y < 0 || move.Y >= board.Height {
+			log.Printf("Removing move: %+v for colliding with wall.", move)
+			delete(moves, key)
+			continue
+		}
+		// Remove moves that would result in colliding with any other part of itself
+		for _, bodyPart := range you.Body {
+			if move.X == bodyPart.X && move.Y == bodyPart.Y {
+				log.Printf("Removing move: %+v for colliding with snake.", move)
+				delete(moves, key)
 			}
 		}
 	}
 
+	log.Printf("Moves remaining: %+v", moves)
+
+	// When no moves are possible...
+	if len(moves) == 0 {
+		return MoveResponse{"down", "I HAVE NO MOVES LEFT!!!"}
+	}
+
+	directions := make([]string, 0, len(moves))
+	for key := range moves {
+		directions = append(directions, key)
+	}
+
 	// Return a random valid move
 	rand.Seed(time.Now().UnixNano())
-	for direction := range moves[rand.Intn(len(moves))] {
-		return MoveResponse{direction, ""}
-	}
-	// No valid moves found, default to "down"
-	return MoveResponse{"down", ""}
+	return MoveResponse{directions[rand.Intn(len(directions))], ""}
 }
 
 // handleEnd is the handler for the POST /end endpoint.
