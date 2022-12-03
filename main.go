@@ -3,16 +3,36 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"time"
 )
+
+type MoveRequest struct {
+	Game  Game  `json:"game"`
+	Turn  int   `json:"turn"`
+	Board Board `json:"board"`
+	You   Snake `json:"you"`
+}
+
+type MoveResponse struct {
+	Move  string `json:"move"`
+	Shout string `json:"shout"`
+}
 
 // Game represents a single game of battlesnake.
 type Game struct {
-	ID    string `json:"id"`
-	Turn  int    `json:"turn"`
-	Board Board  `json:"board"`
-	You   Snake  `json:"you"`
+	ID      string  `json:"id"`
+	Ruleset Ruleset `json:"ruleset"`
+	Map     string  `json:"map"`
+	Timeout int     `json:"timeout"`
+	Source  string  `json:"source"`
+}
+
+type Ruleset struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 // Board represents the state of the game board.
@@ -101,34 +121,46 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	decoder := json.NewDecoder(r.Body)
-	var game Game
-	if err := decoder.Decode(&game); err != nil {
+	var moveRequest MoveRequest
+	if err := decoder.Decode(&moveRequest); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	log.Printf("Turn %d: Calculating move for game %s\n", game.Turn, game.ID)
+	log.Printf("Turn %d: Calculating move for game %s\n", moveRequest.Turn, moveRequest.Game.ID)
 
-	// Calculate the next move
-	var move Move
-	if game.You.Head.X == 0 {
-		// Snake is against the left wall, move right
-		move.Move = "right"
-	} else if game.You.Head.X == game.Board.Width-1 {
-		// Snake is against the right wall, move left
-		move.Move = "left"
-	} else if game.You.Head.Y == 0 {
-		// Snake is against the top wall, move down
-		move.Move = "down"
-	} else if game.You.Head.Y == game.Board.Height-1 {
-		// Snake is against the bottom wall, move up
-		move.Move = "up"
-	}
+	move := move(moveRequest.You.Head, moveRequest.Board)
 
 	// Respond with the calculated move
 	encoder := json.NewEncoder(w)
 	if err := encoder.Encode(move); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func move(currentPosition Coord, board Board) MoveResponse {
+	// Create a list of possible moves
+	var moves []map[string]Coord
+	moves = append(moves, map[string]Coord{"right": {X: currentPosition.X + 1, Y: currentPosition.Y}})
+	moves = append(moves, map[string]Coord{"left": {X: currentPosition.X - 1, Y: currentPosition.Y}})
+	moves = append(moves, map[string]Coord{"up": {X: currentPosition.X, Y: currentPosition.Y + 1}})
+	moves = append(moves, map[string]Coord{"down": {X: currentPosition.X, Y: currentPosition.Y - 1}})
+
+	// Filter out moves that would cause the snake to collide with a wall
+	for i, m := range moves {
+		for _, move := range m {
+			if move.X < 0 && move.X >= board.Width && move.Y < 0 && move.Y >= board.Height { // Out of bound, pop them from list
+				moves = append(moves[:i], moves[i+1:]...)
+			}
+		}
+	}
+
+	// Return a random valid move
+	rand.Seed(time.Now().UnixNano())
+	for direction := range moves[rand.Intn(len(moves))] {
+		return MoveResponse{direction, ""}
+	}
+	// No valid moves found, default to "down"
+	return MoveResponse{"down", ""}
 }
 
 // handleEnd is the handler for the POST /end endpoint.
