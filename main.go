@@ -149,7 +149,7 @@ func move(you Snake, board Board) MoveResponse {
 
 	log.Printf("Possible moves: %+v", moves)
 
-	// Filter out moves that would cause the snake to collide with a wall or itself
+	// Filter out moves that would cause the snake to collide with a wall, itself or other snakes
 	for key, move := range moves {
 		// Remove moves that would result in colliding with the wall
 		if move.X < 0 || move.X >= board.Width || move.Y < 0 || move.Y >= board.Height {
@@ -157,11 +157,13 @@ func move(you Snake, board Board) MoveResponse {
 			delete(moves, key)
 			continue
 		}
-		// Remove moves that would result in colliding with any other part of itself
-		for _, bodyPart := range you.Body {
-			if move.X == bodyPart.X && move.Y == bodyPart.Y {
-				log.Printf("Removing move: %+v for colliding with snake.", move)
-				delete(moves, key)
+		// Remove moves that would result in colliding with any snake including itself
+		for iSnake, snake := range board.Snakes {
+			for _, bodyPart := range snake.Body {
+				if move.X == bodyPart.X && move.Y == bodyPart.Y {
+					log.Printf("Removing move: %+v for colliding with snake %d.", move, iSnake)
+					delete(moves, key)
+				}
 			}
 		}
 	}
