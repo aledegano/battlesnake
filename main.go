@@ -64,6 +64,8 @@ type Move struct {
 	Move string `json:"move"`
 }
 
+type PossibleMoves map[string]Coord
+
 func main() {
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/start", handleStart)
@@ -128,7 +130,9 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Turn %d: Calculating move for game %s\n", moveRequest.Turn, moveRequest.Game.ID)
 
-	move := move(moveRequest.You, moveRequest.Board)
+	possibleMoves := possibleMoves(moveRequest.You, moveRequest.Board)
+
+	move := strategy(possibleMoves, moveRequest.Board)
 
 	// Respond with the calculated move
 	encoder := json.NewEncoder(w)
@@ -137,10 +141,10 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func move(you Snake, board Board) MoveResponse {
+func possibleMoves(you Snake, board Board) PossibleMoves {
 	// Create a list of possible moves
 	currentPosition := you.Head
-	moves := map[string]Coord{
+	moves := PossibleMoves{
 		"right": {X: currentPosition.X + 1, Y: currentPosition.Y},
 		"left":  {X: currentPosition.X - 1, Y: currentPosition.Y},
 		"up":    {X: currentPosition.X, Y: currentPosition.Y + 1},
@@ -170,6 +174,10 @@ func move(you Snake, board Board) MoveResponse {
 
 	log.Printf("Moves remaining: %+v", moves)
 
+	return moves
+}
+
+func strategy(moves PossibleMoves, board Board) MoveResponse {
 	// When no moves are possible...
 	if len(moves) == 0 {
 		return MoveResponse{"down", "I HAVE NO MOVES LEFT!!!"}
