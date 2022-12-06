@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"math/rand"
+	"math"
 	"net/http"
 	"os"
-	"time"
+	"sort"
 )
 
 type MoveRequest struct {
@@ -66,6 +66,9 @@ type Move struct {
 }
 
 type PossibleMoves map[string]Coord
+
+const CORNER_AVOIDANCE = 2
+const FOOD = 1
 
 func main() {
 	http.HandleFunc("/", handleRoot)
@@ -133,7 +136,7 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 
 	possibleMoves := possibleMoves(moveRequest.You, moveRequest.Board)
 
-	move := strategy(possibleMoves, moveRequest.Board)
+	move := strategy(possibleMoves, moveRequest.You, moveRequest.Board)
 
 	// Respond with the calculated move
 	encoder := json.NewEncoder(w)
@@ -180,26 +183,41 @@ func possibleMoves(you Snake, board Board) PossibleMoves {
 			}
 		}
 	}
-
 	log.Printf("Moves remaining: %+v", moves)
-
 	return moves
 }
 
-func strategy(moves PossibleMoves, board Board) MoveResponse {
-	// When no moves are possible...
+func strategy(moves PossibleMoves, you Snake, board Board) MoveResponse {
 	if len(moves) == 0 {
 		return MoveResponse{"down", "I HAVE NO MOVES LEFT!!!"}
 	}
 
-	directions := make([]string, 0, len(moves))
+	movesRating := make(map[string]int, len(moves))
 	for key := range moves {
-		directions = append(directions, key)
+		movesRating[key] = 0
 	}
 
-	// Return a random valid move
-	rand.Seed(time.Now().UnixNano())
-	return MoveResponse{directions[rand.Intn(len(directions))], ""}
+	center := Coord{X: int(board.Width / 2), Y: int(board.Height / 2)}
+	// Rate the move that gets the snake closer to the center
+	for key, move := range moves {
+		if math.Abs(float64(move.X-center.X)) < math.Abs(float64(you.Head.X-center.X)) {
+			movesRating[key] += CORNER_AVOIDANCE
+			continue
+		}
+		if math.Abs(float64(move.Y-center.Y)) < math.Abs(float64(you.Head.Y-center.Y)) {
+			movesRating[key] += CORNER_AVOIDANCE
+		}
+	}
+
+	movesRated := make([]string, 0, len(movesRating))
+	for move := range movesRating {
+		movesRated = append(movesRated, move)
+	}
+	sort.Slice(movesRated, func(i, j int) bool {
+		return movesRating[movesRated[i]] < movesRating[movesRated[j]]
+	})
+	log.Printf("Rated moves: %+v", movesRated)
+	return MoveResponse{movesRated[0],""}
 }
 
 // handleEnd is the handler for the POST /end endpoint.
