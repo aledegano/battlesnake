@@ -37,10 +37,11 @@ type Ruleset struct {
 
 // Board represents the state of the game board.
 type Board struct {
-	Width  int     `json:"width"`
-	Height int     `json:"height"`
-	Food   []Coord `json:"food"`
-	Snakes []Snake `json:"snakes"`
+	Width   int     `json:"width"`
+	Height  int     `json:"height"`
+	Food    []Coord `json:"food"`
+	Hazards []Coord `json:"hazards"`
+	Snakes  []Snake `json:"snakes"`
 }
 
 // Snake represents a single snake in the game.
@@ -160,6 +161,14 @@ func possibleMoves(you Snake, board Board) PossibleMoves {
 			log.Printf("Removing move: %+v for colliding with wall.", move)
 			delete(moves, key)
 			continue
+		}
+		// Remove moves that would result in colliding with a hazard
+		for iHazard, hazard := range board.Hazards {
+			if move.X == hazard.X && move.Y == hazard.Y {
+				log.Printf("Removing move: %+v for colliding with hazard %d.", move, iHazard)
+				delete(moves, key)
+				continue
+			}
 		}
 		// Remove moves that would result in colliding with any snake including itself
 		for iSnake, snake := range board.Snakes {
